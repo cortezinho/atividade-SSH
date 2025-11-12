@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Denúncias Institucionais (Simulação)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Variáveis e Estilos Customizados */
+        :root {
+            --accent: #d24b3b;
+            --muted: #666;
+            --bg: #f7f7f7;
+        }
+        body {
+            /* Adicione uma fonte mais moderna (como Inter) caso seja necessário importar */
+            font-family: 'Inter', Arial, sans-serif;
+            background-color: var(--bg);
+            color: #222;
+        }
+
+        /* Cores e estilos do Checklist */
+        .check-item.ok {
+            border-left: 4px solid #2e8b57; /* Verde escuro */
+            background-color: #f6fffb; /* Verde claro */
+        }
+        .check-item.nok {
+            border-left: 4px solid #d9534f; /* Vermelho escuro */
+            background-color: #fff6f6; /* Vermelho claro */
+        }
+        .submission-preview pre {
+            background-color: #1f2937; /* Gray-800 */
+            color: #a8f0a8; /* Verde Neon */
+            padding: 1rem;
+            border-radius: 0.375rem; /* rounded-lg */
+            overflow: auto;
+            margin-top: 0.75rem; /* mt-3 */
+            font-family: monospace; /* Garante a monospaced font */
+        }
+        .btn-primary {
+            background-color: #0b5fff;
+            color: #fff;
+        }
+        .btn-secondary {
+            background-color: #eee;
+            color: #333;
+        }
+
+        /* Layout responsivo para main-inner */
+        .main-inner {
+            display: flex;
+            gap: 2rem;
+            flex-direction: column;
+        }
+
+        @media (min-width: 1024px) {
+            .main-inner {
+                flex-direction: row;
+            }
+            .aside {
+                width: 300px;
+                flex-shrink: 0;
+            }
+        }
+    </style>
+</head>
+
+<body class="min-h-screen">
+    <div id="app-root" class="page">
+        </div>
+
+    <div id="message-box" class="fixed inset-0 z-50 bg-black bg-opacity-40 hidden" onclick="hideMessage()">
+        <div class="bg-white p-6 rounded-lg shadow-2xl max-w-sm mx-auto my-20" onclick="event.stopPropagation()">
+            <h4 class="text-xl font-bold mb-3 text-gray-800">Aviso</h4>
+            <p id="message-text" class="text-gray-700 mb-6"></p>
+            <div class="flex justify-end space-x-3">
+                <button onclick="hideMessage(false)" id="confirm-btn-cancel" class="px-4 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100 hidden">Cancelar</button>
+                <button onclick="hideMessage(true)" id="confirm-btn-ok" class="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =================================================================
+        // Variáveis de Estado (Simulando React State)
+        // =================================================================
+        let submitted = false;
+        // Objeto 'form' inicializado com strings vazias para melhor controle
+        let form = { nome: "", cpf: "", email: "", telefone: "", descricao: "" };
+        let lastSubmission = null;
+        let confirmAction = null; // Função de callback para a caixa de confirmação
+
+        // =================================================================
+        // Funções de UI (Substituindo alert/confirm)
+        // =================================================================
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        const confirmBtnOk = document.getElementById('confirm-btn-ok');
+        const confirmBtnCancel = document.getElementById('confirm-btn-cancel');
+
+        function showMessage(text, isConfirm, callback) {
+            messageText.textContent = text;
+            messageBox.classList.remove('hidden');
+            confirmAction = callback; // Atribui a função de callback
+
+            if (isConfirm) {
+                confirmBtnCancel.classList.remove('hidden');
+                confirmBtnOk.textContent = 'Confirmar';
+            } else {
+                confirmBtnCancel.classList.add('hidden');
+                confirmBtnOk.textContent = 'OK';
+            }
+        }
+
+        function hideMessage(result) {
+            messageBox.classList.add('hidden');
+            // Executa a função de callback, passando o resultado (true/false)
+            if (confirmAction) {
+                confirmAction(result);
+                confirmAction = null; // Limpa a ação após a execução
+            }
+        }
+
+
+        // =================================================================
+        // Funções de Componentes (Substituindo React Components)
+        // =================================================================
+
+        // Helper para criar a lista de itens do checklist
+        function createChecklistItem(item) {
+            // Usa as classes Tailwind para cores e layout
+            const icon = item.ok ? '✅' : '❌';
+            const colorClass = item.ok ? 'ok' : 'nok';
+            
+            return `
+                <div class="check-item p-3 rounded-lg flex items-center ${colorClass}">
+                    <div class="check-left flex gap-3 items-start w-full">
+                        <div class="bullet text-xl flex-shrink-0">${icon}</div>
+                        <div>
+                            <div class="question font-semibold">${item.text}</div>
+                            <div class="detail text-sm text-gray-500 mt-1">${item.detail}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Checklist Component
+        function ChecklistHTML(submission) {
+            if (!submission) {
+                return `
+                    <section class="checklist-section w-full lg:w-3/4">
+                        <div class="checklist-wrapper bg-white p-7 rounded-lg shadow-md">
+                            <h2 class="text-2xl font-bold mb-4 text-gray-800">Checklist de Verificação Institucional</h2>
+                            <p class="text-gray-600">Nenhuma submissão encontrada para validar.</p>
+                            <div class="mt-6">
+                                <button onclick="handleBack()" class="btn px-4 py-2 rounded-lg font-semibold btn-primary">Voltar ao formulário</button>
+                            </div>
+                        </div>
+                    </section>
+                `;
+            }
+
+            // Lógica de validação
+            // Estas são simulações. Mantenha os valores lógicos (true/false) para o checklist funcionar.
+            const hasHTTPS = true; 
+            const domainLooksOfficial = false;
+            const hasContact = !!(submission.email || submission.telefone);
+            const hasSignatureOrSeal = !!submission.nome;
+            const mentionsPrivacy = submission.descricao && submission.descricao.length > 20;
+
+            const items = [
+                { text: "O site possui certificado HTTPS válido?", ok: hasHTTPS, detail: hasHTTPS ? "🔒 Certificado aparentemente presente (simulado)" : "❌ Sem HTTPS" },
+                { text: "O domínio é realmente da instituição (ex: .gov.br / .edu.br)?", ok: domainLooksOfficial, detail: domainLooksOfficial ? "✅ Domínio parecido com institucional" : "❌ Domínio não verificado (simulado)" },
+                { text: "Há canais oficiais de contato confirmando o formulário?", ok: hasContact, detail: hasContact ? `✅ Contato presente: ${submission.email || submission.telefone}` : "❌ Sem contato fornecido" },
+                { text: "Há assinatura ou selo institucional visível?", ok: hasSignatureOrSeal, detail: hasSignatureOrSeal ? `✅ Nome informado: ${submission.nome}` : "❌ Nome não informado" },
+                { text: "O conteúdo informa política de privacidade e uso de dados?", ok: mentionsPrivacy, detail: mentionsPrivacy ? "✅ Texto longo descrevendo o caso (simulação)" : "❌ Não há texto suficiente mencionando privacidade" },
+            ];
+
+            const itemsHtml = items.map(createChecklistItem).join('');
+            const previewJson = JSON.stringify(submission, null, 2);
+
+            return `
+                <section class="checklist-section w-full lg:w-3/4">
+                    <div class="checklist-wrapper bg-white p-7 rounded-lg shadow-md">
+                        <h2 class="text-2xl font-bold mb-4 text-gray-800">Checklist de Verificação Institucional ✅</h2>
+                        <p class="text-gray-600 mb-6">Avaliando os dados da sua última submissão (usados apenas para demonstrar o checklist):</p>
+                        <div class="checklist-items flex flex-col gap-3">
+                            ${itemsHtml}
+                        </div>
+                        <div class="submission-preview mt-6">
+                            <h3 class="text-lg font-semibold mb-2">Preview (dados usados na verificação)</h3>
+                            <pre>${previewJson}</pre>
+                        </div>
+                        <div class="mt-6 flex gap-3">
+                            <button onclick="handleBack()" class="btn px-4 py-2 rounded-lg font-semibold btn-primary hover:bg-blue-700 transition">Voltar ao formulário</button>
+                            <button type="button" onclick="handleClearStorageConfirm()" class="btn px-4 py-2 rounded-lg font-semibold btn-secondary hover:bg-gray-200 transition">Limpar Storage</button>
+                        </div>
+                    </div>
+                </section>
+            `;
+        }
+
+        // Form Component (Principal View)
+        function FormHTML() {
+            // O atributo 'value' não é usado para <textarea>.
+            // Os valores dos inputs são atualizados via JS na função bindFormToState.
+            return `
+                <section class="form-section flex-1 bg-white p-7 rounded-lg shadow-md">
+                    <h1 class="text-3xl font-bold mb-4 text-gray-800">Fale Conosco — Ouvidoria</h1>
+                    <p class="lead text-gray-500 mb-6">
+                        Este é um <strong>ambiente de simulação</strong> criado para ensinar como verificar a autenticidade de formulários.
+                        <br>
+                        Preencha abaixo — os dados serão salvos em <code>localStorage</code> (não enviados a servidor).
+                    </p>
+
+                    <form onsubmit="handleSubmit(event)" id="denuncia-form" class="formulario space-y-4" autocomplete="off">
+                        <div class="row">
+                            <label for="nome" class="block font-semibold mb-1">Nome completo</label>
+                            <input name="nome" type="text" id="nome" 
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                                required />
+                        </div>
+
+                        <div class="row two flex gap-4 flex-col sm:flex-row">
+                            <div class="flex-1">
+                                <label for="cpf" class="block font-semibold mb-1">CPF</label>
+                                <input name="cpf" type="text" id="cpf" 
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                                    required />
+                            </div>
+                            <div class="flex-1">
+                                <label for="telefone" class="block font-semibold mb-1">Telefone</label>
+                                <input name="telefone" type="tel" id="telefone" placeholder="(99) 99999-9999" 
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <label for="email" class="block font-semibold mb-1">E-mail</label>
+                            <input name="email" type="email" id="email" 
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                                required />
+                        </div>
+
+                        <div class="row">
+                            <label for="descricao" class="block font-semibold mb-1">Descrição da denúncia</label>
+                            <textarea name="descricao" id="descricao" required rows="6" 
+                                class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"></textarea>
+                        </div>
+
+                        <div class="actions flex gap-3 items-center pt-4">
+                            <button type="submit" class="btn px-4 py-2 rounded-lg font-semibold shadow-md hover:shadow-lg transition btn-primary hover:bg-blue-700">Enviar denúncia</button>
+                            <button type="button" onclick="handleClearStorageConfirm()" class="btn px-4 py-2 rounded-lg font-semibold btn-secondary hover:bg-gray-200 transition">Limpar Storage</button>
+                        </div>
+                    </form>
+                </section>
+            `;
+        }
+
+        // =================================================================
+        // Funções de Manipulação de Estado (Simulando React Hooks)
+        // =================================================================
+
+        function setFormState(newForm) {
+            form = newForm;
+            // Após atualizar o estado JS, re-renderiza ou sincroniza
+            // Como o form está na mesma view, a sincronização é mais rápida
+            if (!submitted) {
+                 bindFormToState();
+            }
+        }
+
+        function setSubmittedState(isSubmitted) {
+            submitted = isSubmitted;
+            render(); // Renderiza novamente toda a aplicação para mudar de view
+        }
+
+        function setLastSubmissionState(submission) {
+            lastSubmission = submission;
+        }
+
+        /**
+         * Sincroniza o estado 'form' do JS com os campos de input/textarea do DOM.
+         */
+        function bindFormToState() {
+            const formElement = document.getElementById('denuncia-form');
+            if (formElement) {
+                // Itera sobre todas as chaves no objeto 'form'
+                Object.keys(form).forEach(key => {
+                    const element = formElement.querySelector(`[name="${key}"]`);
+                    if (element) {
+                        // Para <textarea>, use textContent/innerHTML, mas value funciona no JS. 
+                        // O importante é definir o valor.
+                        if (element.tagName === 'TEXTAREA') {
+                            element.value = form[key];
+                        } else {
+                            element.value = form[key];
+                        }
+                        // Adiciona o listener de input para manter o estado JS atualizado
+                        element.oninput = handleChange;
+                    }
+                });
+            }
+        }
+
+
+        function handleChange(event) {
+            const { name, value } = event.target;
+            // Atualiza o estado JS
+            form = { ...form, [name]: value };
+            
+            // Opcional: Atualiza o DOM do elemento imediatamente para evitar falhas de re-renderização
+            // Como o FormHTML é grande, atualizamos o estado e deixamos o JS fazer a atualização.
+            // Para performance em Vanilla JS, atualize o DOM do elemento individualmente.
+            event.target.value = value;
+            
+        }
+
+        function handleSubmit(event) {
+            event.preventDefault();
+
+            // Lógica de manipulação de dados
+            const nova = { ...form, data: new Date().toISOString() };
+            const listaExistente = JSON.parse(localStorage.getItem("denuncias")) || [];
+            
+            listaExistente.push(nova);
+            localStorage.setItem("denuncias", JSON.stringify(listaExistente));
+
+            // Atualiza estado e muda a view
+            setLastSubmissionState(nova);
+            setFormState({ nome: "", cpf: "", email: "", telefone: "", descricao: "" }); // Limpa o formulário
+            setSubmittedState(true); // Muda a view para o checklist
+        }
+
+        function handleBack() {
+            setSubmittedState(false); // Volta para a view do formulário
+        }
+        
+        function handleClearStorageConfirm() {
+            showMessage("Tem certeza que deseja limpar todas as denúncias salvas no localStorage?", true, (confirmed) => {
+                if (confirmed) {
+                    localStorage.removeItem("denuncias");
+                    setLastSubmissionState(null);
+                    // Garante que a view volta para o formulário
+                    setSubmittedState(false); 
+                    // Mostra uma mensagem de sucesso após limpar
+                    showMessage("LocalStorage limpo com sucesso.", false);
+                }
+            });
+        }
+
+
+        // =================================================================
+        // Renderização Principal e Estrutura
+        // =================================================================
+
+        function render() {
+            const root = document.getElementById('app-root');
+            
+            const mainContent = submitted ? 
+                ChecklistHTML(lastSubmission) : 
+                FormHTML();
+
+            root.innerHTML = `
+                <header class="header bg-white border-b border-gray-200">
+                    <div class="header-inner max-w-7xl mx-auto p-4 flex items-center justify-between">
+                        <div class="brand flex items-center gap-3">
+                            <div class="brand-logo w-12 h-12 bg-blue-600 text-white flex items-center justify-center font-extrabold rounded-lg">UA</div>
+                            <div class="brand-text text-gray-800">
+                                <strong class="text-base">Universidade Alfa</strong>
+                                <div class="brand-sub text-sm text-gray-500">Ouvidoria — Simulação</div>
+                            </div>
+                        </div>
+                        <nav class="top-nav hidden md:flex space-x-4">
+                            <a href="#quem-somos" onclick="event.preventDefault()" class="text-sm text-gray-700 hover:text-blue-600 transition">Quem somos</a>
+                            <a href="#contato" onclick="event.preventDefault()" class="text-sm text-gray-700 hover:text-blue-600 transition">Fale conosco</a>
+                            <a href="#apoie" onclick="event.preventDefault()" class="cta bg-[var(--accent)] text-white text-sm px-3 py-1.5 rounded-lg font-semibold hover:bg-red-700 transition">Apoie</a>
+                        </nav>
+                    </div>
+                </header>
+
+                <main class="main max-w-7xl mx-auto p-4 lg:p-6">
+                    <div class="main-inner">
+                        ${mainContent}
+
+                        <aside class="aside w-full lg:w-auto">
+                            <div class="contact-box bg-white p-4 rounded-lg shadow-md border border-gray-100 mb-4">
+                                <h3 class="text-xl font-bold mb-2 text-gray-800">Canal de relacionamento</h3>
+                                <p class="text-gray-600 mb-2">Para confirmar: <strong>ouvidoria@universidadealfa.sim</strong></p>
+                                <p class="text-gray-600">Telefone: <strong>(11) 4000-0000</strong></p>
+                            </div>
+
+                            <div class="info-box bg-white p-4 rounded-lg shadow-md border border-gray-100">
+                                <h4 class="text-lg font-bold mb-2 text-gray-800">Privacidade</h4>
+                                <p class="text-sm text-gray-600">Os dados desta simulação são armazenados localmente no navegador (localStorage).</p>
+                                <div class="mt-4">
+                                    <button type="button" onclick="handleClearStorageConfirm()" class="w-full btn px-4 py-2 text-sm rounded-lg font-semibold btn-secondary hover:bg-gray-200 transition">Limpar Dados Locais</button>
+                                </div>
+                            </div>
+                        </aside>
+                    </div>
+                </main>
+
+                <footer class="footer mt-10 border-t border-gray-200 bg-white">
+                    <div class="footer-inner max-w-7xl mx-auto p-5 flex flex-col md:flex-row justify-between items-center text-center md:text-left">
+                        <div class="mb-4 md:mb-0">
+                            <h4 class="text-base font-semibold text-gray-800">Receba nossas atualizações</h4>
+                            <p class="text-sm text-gray-600">Projeto educativo — não colete dados reais.</p>
+                        </div>
+                        <div>
+                            <small class="text-gray-500">Universidade Alfa — Simulação</small>
+                        </div>
+                    </div>
+                </footer>
+            `;
+
+            // **IMPORTANTE:** Após a re-renderização, sincroniza os valores do estado JS com os inputs do DOM.
+            if (!submitted) {
+                bindFormToState();
+            }
+        }
+
+        // =================================================================
+        // Inicialização
+        // =================================================================
+
+        window.onload = () => {
+            // Tenta carregar a última submissão ao iniciar para popular o Checklist, se houver
+            const todas = JSON.parse(localStorage.getItem("denuncias")) || [];
+            if (todas.length > 0) {
+                lastSubmission = todas[todas.length - 1];
+            }
+            render();
+        };
+
+    </script>
+</body>
+</html>
